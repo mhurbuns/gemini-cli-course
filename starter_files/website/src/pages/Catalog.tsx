@@ -1,30 +1,57 @@
-import { useState, useMemo } from 'react';
-import { Search, Filter, Calendar, MapPin, Clock, ArrowRight, User } from 'lucide-react';
+import { useMemo } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
+import { Search, Filter, Calendar, MapPin, Clock, ArrowRight, User, Hash, BarChart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link } from 'react-router-dom';
 import { SESSIONS, type Session } from '../data/sessions';
 
 export const Catalog = () => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDay, setSelectedDay] = useState<string>('All');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const searchQuery = searchParams.get('q') || '';
+  const selectedDay = searchParams.get('day') || 'All';
+  const selectedCategory = searchParams.get('category') || 'All';
+  const selectedSpeaker = searchParams.get('speaker') || 'All';
+  const selectedLevel = searchParams.get('level') || 'All';
+  const selectedTrack = searchParams.get('track') || 'All';
+
+  // Helper to update params
+  const updateParam = (key: string, value: string) => {
+    setSearchParams(prev => {
+      if (value === 'All' || value === '') {
+        prev.delete(key);
+      } else {
+        prev.set(key, value);
+      }
+      return prev;
+    });
+  };
 
   const days = ['All', 'Day 1', 'Day 2', 'Day 3'];
   const categories = ['All', 'Keynote', 'Breakout', 'Customer Story', 'Learning Lab', 'Expo'];
+  
+  // Extract unique values for new filters
+  const speakers = useMemo(() => ['All', ...Array.from(new Set(SESSIONS.map(s => s.speaker))).sort()], []);
+  const levels = useMemo(() => ['All', ...Array.from(new Set(SESSIONS.map(s => s.details?.level).filter(Boolean) as string[])).sort()], []);
+  const tracks = useMemo(() => ['All', ...Array.from(new Set(SESSIONS.flatMap(s => s.details?.tracks || []))).sort()], []);
 
   const filteredSessions = useMemo<Session[]>(() => {
     return SESSIONS.filter(session => {
+      const q = searchQuery.toLowerCase();
       const matchesSearch = 
-        session.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        session.speaker.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        session.description.toLowerCase().includes(searchQuery.toLowerCase());
+        session.title.toLowerCase().includes(q) ||
+        session.speaker.toLowerCase().includes(q) ||
+        session.description.toLowerCase().includes(q) ||
+        (session.details?.fullDescription || '').toLowerCase().includes(q);
       
       const matchesDay = selectedDay === 'All' || session.day === selectedDay;
       const matchesCategory = selectedCategory === 'All' || session.category === selectedCategory;
+      const matchesSpeaker = selectedSpeaker === 'All' || session.speaker === selectedSpeaker;
+      const matchesLevel = selectedLevel === 'All' || session.details?.level === selectedLevel;
+      const matchesTrack = selectedTrack === 'All' || (session.details?.tracks || []).includes(selectedTrack);
 
-      return matchesSearch && matchesDay && matchesCategory;
+      return matchesSearch && matchesDay && matchesCategory && matchesSpeaker && matchesLevel && matchesTrack;
     });
-  }, [searchQuery, selectedDay, selectedCategory]);
+  }, [searchQuery, selectedDay, selectedCategory, selectedSpeaker, selectedLevel, selectedTrack]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 py-12">
@@ -38,10 +65,10 @@ export const Catalog = () => {
 
         {/* Search and Filter Controls */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 mb-8">
-          <div className="flex flex-col lg:flex-row gap-6">
+          <div className="flex flex-col gap-6">
             
-            {/* Search */}
-            <div className="flex-1 relative">
+            {/* Top Row: Search */}
+            <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="h-5 w-5 text-slate-400" />
               </div>
@@ -50,21 +77,22 @@ export const Catalog = () => {
                 placeholder="Search sessions, speakers, or topics..."
                 className="block w-full pl-10 pr-3 py-3 border border-slate-200 dark:border-slate-700 rounded-xl leading-5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 sm:text-sm transition-all"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => updateParam('q', e.target.value)}
               />
             </div>
 
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-4">
+            {/* Filter Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              
               {/* Day Filter */}
-              <div className="relative min-w-[140px]">
+              <div className="relative">
                 <select
                   value={selectedDay}
-                  onChange={(e) => setSelectedDay(e.target.value)}
+                  onChange={(e) => updateParam('day', e.target.value)}
                   className="block w-full pl-3 pr-10 py-3 text-base border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white appearance-none cursor-pointer"
                 >
                   {days.map((day) => (
-                    <option key={day} value={day}>{day}</option>
+                    <option key={day} value={day}>{day === 'All' ? 'All Days' : day}</option>
                   ))}
                 </select>
                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
@@ -73,20 +101,72 @@ export const Catalog = () => {
               </div>
 
               {/* Category Filter */}
-              <div className="relative min-w-[180px]">
+              <div className="relative">
                 <select
                   value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  onChange={(e) => updateParam('category', e.target.value)}
                   className="block w-full pl-3 pr-10 py-3 text-base border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white appearance-none cursor-pointer"
                 >
                   {categories.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
+                    <option key={cat} value={cat}>{cat === 'All' ? 'All Categories' : cat}</option>
                   ))}
                 </select>
                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
                   <Filter className="h-4 w-4" />
                 </div>
               </div>
+
+               {/* Speaker Filter */}
+               <div className="relative">
+                <select
+                  value={selectedSpeaker}
+                  onChange={(e) => updateParam('speaker', e.target.value)}
+                  className="block w-full pl-3 pr-10 py-3 text-base border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white appearance-none cursor-pointer"
+                >
+                  <option value="All">All Speakers</option>
+                  {speakers.filter(s => s !== 'All').map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                  <User className="h-4 w-4" />
+                </div>
+              </div>
+
+               {/* Level Filter */}
+               <div className="relative">
+                <select
+                  value={selectedLevel}
+                  onChange={(e) => updateParam('level', e.target.value)}
+                  className="block w-full pl-3 pr-10 py-3 text-base border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white appearance-none cursor-pointer"
+                >
+                   <option value="All">All Levels</option>
+                  {levels.filter(l => l !== 'All').map((l) => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
+                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                  <BarChart className="h-4 w-4" />
+                </div>
+              </div>
+
+              {/* Track Filter */}
+              <div className="relative">
+                <select
+                  value={selectedTrack}
+                  onChange={(e) => updateParam('track', e.target.value)}
+                  className="block w-full pl-3 pr-10 py-3 text-base border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white appearance-none cursor-pointer"
+                >
+                  <option value="All">All Tracks</option>
+                  {tracks.filter(t => t !== 'All').map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                  <Hash className="h-4 w-4" />
+                </div>
+              </div>
+
             </div>
           </div>
           
@@ -94,6 +174,15 @@ export const Catalog = () => {
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Showing {filteredSessions.length} sessions
             </p>
+            {/* Clear Filters Button */}
+            {(searchQuery || selectedDay !== 'All' || selectedCategory !== 'All' || selectedSpeaker !== 'All' || selectedLevel !== 'All' || selectedTrack !== 'All') && (
+              <button
+                onClick={() => setSearchParams({})}
+                className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
+              >
+                Clear all filters
+              </button>
+            )}
           </div>
         </div>
 
